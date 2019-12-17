@@ -6,13 +6,14 @@ BASIC SETTINGS
 
 
 '''
-CHANGE THIS !!!
+CHANGE THESE BELOW !!!
 '''
 #  NEW_NET_NAME  = "ANN"
 #  NEW_NET_NAME  = "testSave_STD"
 #  NEW_NET_NAME = "testSave_standard"
 #  NEW_NET_NAME = "testSave_standard_dropout"
 NEW_NET_NAME = "ch_standard_conv1d"
+#  MATTER_NAME  = "oh"
 MATTER_NAME  = "ch"
 '''
 DO NOT TOUCH THE OTHERS

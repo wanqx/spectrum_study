@@ -99,10 +99,10 @@ class ConvNet(Model):
         #  x = self.conv15(x)
         x = self.flatten(x)
         x = self.fc2(x)
-        x = self.dropout2(x, training=is_training)
+        #  x = self.dropout2(x, training=is_training)
         #  x = self.fc1(x)
         x = self.fc0(x)
-        x = self.dropout1(x, training=is_training)
+        #  x = self.dropout1(x, training=is_training)
         x = self.out(x)
         #  if not is_training:
         #      # tf cross entropy expect logits without softmax, so only
