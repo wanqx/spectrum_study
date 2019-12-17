@@ -1,24 +1,28 @@
-import numpy as np
+from __future__ import absolute_import, division, print_function
+
 import tensorflow as tf
+from tensorflow.keras import Model, layers
+import numpy as np
 import matplotlib.pyplot as plt
 from timer import timer
-
-from load_basic import DATA_FOLDER, EXPER_FOLDER, DATA_SIZE
+from load_basic import DATA_FOLDER, EXPER_FOLDER, DATA_SIZE, NET_NAME
 from read_data import ideal_data_generator, exper_data_generator, DATA_FEATURES, EXPER_FEATURES
 
-learning_rate  = 1e-7
-batch_size     = 128
-training_steps = 10000
-epoch          = 200
-display_step   = 10
+
+learning_rate  = 1e-3
+batch_size     = 1
+epoch          = 1
+training_steps = DATA_SIZE*epoch
+display_step   = 1
+print(training_steps)
 
 num_features =  DATA_FEATURES # number of wave length separate.
 print("data features: ", num_features)
 
-num_hidden_1 = 256 # 1st layer num features.
-num_hidden_2 = 128 # 2nd layer num features (the latent dim).
-num_hidden_3 = 8
-num_hidden_4 = 1
+#  num_hidden_1 = 512 # 1st layer num features.
+#  num_hidden_2 = 128 # 2nd layer num features (the latent dim).
+#  num_hidden_3 = 32
+#  num_hidden_4 = 1
 
 train_size = int(0.8*DATA_SIZE)
 #  test_size = int(0.3*DATA_SIZE)
@@ -29,93 +33,141 @@ dataset = tf.data.Dataset.from_generator(
     (tf.TensorShape(None), tf.TensorShape(None), tf.TensorShape(None))
 )
 
-dataset   = dataset.shuffle(6000).repeat(epoch).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 train_set = dataset.take(train_size)
 test_set  = dataset.skip(train_size)
 
-random_normal = tf.initializers.RandomNormal()
+train_set = train_set.shuffle(train_size).repeat(epoch).batch(batch_size).prefetch(epoch)
 
-weights = {
-    'h1': tf.Variable(random_normal([num_features, num_hidden_1])),
-    'h2': tf.Variable(random_normal([num_hidden_1, num_hidden_2])),
-    'h3': tf.Variable(random_normal([num_hidden_2, num_hidden_3])),
-    'h4': tf.Variable(random_normal([num_hidden_3, num_hidden_4])),
-}
-biases = {
-    'b1': tf.Variable(random_normal([num_hidden_1])),
-    'b2': tf.Variable(random_normal([num_hidden_2])),
-    'b3': tf.Variable(random_normal([num_hidden_3])),
-    'b4': tf.Variable(random_normal([num_hidden_4])),
-}
+class ConvNet(Model):
+    # Set layers.
+    def __init__(self):
+        super().__init__()
+        # Convolution Layer with 32 filters and a kernel size of 5.
+        self.flatten = layers.Flatten()
 
+        # Fully connected layer.
+        self.fc2 = layers.Dense(2048)
+        #  self.fc1 = layers.Dense(1313)
+        self.fc0 = layers.Dense(512)
+        # Apply Dropout (if is_training is False, dropout is not applied).
+        self.dropout = layers.Dropout(rate=0.5)
 
+        # Output layer, class prediction.
+        self.out = layers.Dense(1)
 
-# Building the encoder.
-def ANN(x):
-    # Encoder Hidden layer with sigmoid activation.
-    layer_1 = tf.nn.sigmoid(tf.add(tf.matmul(x, weights['h1']), biases['b1']))
-    # Encoder Hidden layer with sigmoid activation.
-    layer_2 = tf.nn.sigmoid(tf.add(tf.matmul(layer_1, weights['h2']), biases['b2']))
-    layer_3 = tf.nn.sigmoid(tf.add(tf.matmul(layer_2, weights['h3']), biases['b3']))
-    layer_out = tf.nn.sigmoid(tf.add(tf.matmul(layer_3, weights['h4']), biases['b4']))
-    return layer_out
+    # Set forward pass.
+    def call(self, x, is_training=False):
+        x = tf.reshape(x, [-1, DATA_FEATURES, 1])
+        #  x = self.conv1(x)
+        #  x = self.conv2(x)
+        #  x = self.conv3(x)
+        #  x = self.conv4(x)
+        #  x = self.conv5(x)
+        #  x = self.conv6(x)
+        #  x = self.conv7(x)
+        #  x = self.conv8(x)
+        #  x = self.conv9(x)
+        #  x = self.conv10(x)
+        #  x = self.conv11(x)
+        #  x = self.conv12(x)
+        #  x = self.conv13(x)
+        #  x = self.conv14(x)
+        #  x = self.conv15(x)
+        x = self.flatten(x)
+        x = self.fc2(x)
+        #  x = self.fc1(x)
+        x = self.fc0(x)
+        x = self.dropout(x, training=is_training)
+        x = self.out(x)
+        #  if not is_training:
+        #      # tf cross entropy expect logits without softmax, so only
+        #      # apply softmax when not training.
+        #      x = tf.nn.softmax(x)
+        return x
 
+# Build neural network model.
+conv_net = ConvNet()
 
+# Cross-Entropy Loss.
+# Note that this will apply 'softmax' to the logits.
 
-# Mean square loss between original images and reconstructed ones.
-def lossfunc(predicted, original):
-    return tf.reduce_mean(tf.pow(original-predicted, 2))
+def lossfunc(pred, ori):
+    return tf.reduce_mean(tf.pow(ori-pred, 2))
+    #  cp = tf.math.abs(tf.subtract(pred, ori))
+    #  return tf.reduce_mean(tf.cast(cp, tf.float32))
 
-# Adam optimizer.
-optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
+# Accuracy metric.
+def accuracy(y_pred, y_true):
+    # Predicted class is the index of highest score in prediction vector (i.e. argmax).
+    correct_prediction = tf.math.abs(tf.subtract(y_pred, y_true))
+    return 1-tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+# Stochastic gradient descent optimizer.
+optimizer = tf.optimizers.Adam(learning_rate)
 
-# Optimization process. 
-def run_optimization(vtemp, rtemp, x):
+# Optimization process.
+def run_optimization(x, y):
     # Wrap computation inside a GradientTape for automatic differentiation.
     with tf.GradientTape() as g:
-        predicted = ANN(x)
-        loss = lossfunc(predicted, vtemp)
+        # Forward pass.
+        pred = conv_net(x, is_training=True)
+        # Compute loss.
+        loss = lossfunc(pred, y)
 
     # Variables to update, i.e. trainable variables.
-    trainable_variables = list(weights.values()) + list(biases.values())
+    trainable_variables = conv_net.trainable_variables
 
     # Compute gradients.
     gradients = g.gradient(loss, trainable_variables)
+
     # Update W and b following gradients.
     optimizer.apply_gradients(zip(gradients, trainable_variables))
-    return loss
 
+if __name__=="__main__":
+    LOSS = []
+    ACC = []
+    # Run training for the given number of steps.
+    for step, (v, r, batch_x) in enumerate(train_set.take(training_steps), 1):
+        # Run the optimization to update W and b values.
+        run_optimization(batch_x, v)
 
-# Run training for the given number of steps.
-residual = []
-@timer
-def run():
-    for step, (v, r, x) in enumerate(train_set.take(training_steps)):
-        loss = run_optimization(v, r, x)
-        residual.append(loss)
         if step % display_step == 0:
+            pred = conv_net(batch_x)
+            loss = lossfunc(pred, v)
+            LOSS.append(loss)
+            #  acc = accuracy(pred, v)
+            #  ACC.append(acc)
+            #  print("step: %i, loss: %f, accuracy: %f" % (step, loss, acc))
             print("step: %i, loss: %f" % (step, loss))
-run()
 
-plt.plot(residual)
-plt.show()
+    plt.plot(LOSS)
+    plt.show()
+    plt.plot(np.log(LOSS))
+    plt.show()
+    #  plt.plot(ACC)
+    #  plt.show()
+    # Test model on validation set.
+    #  pred = conv_net(x_test)
+    conv_net.save_weights(NET_NAME)
+    #
+    #  new_model = ConvNet()
+    #  new_model.load_weights('testSave')
+    #  pred = new_model(x_test)
+    #  print("Test Accuracy2: %f" % accuracy(pred, y_test))
 
 #
-#  # Encode and decode images from test set and visualize their reconstruction.
-#  n = 1
-#  predict = []
-#  real = []
-#  print("here")
-#  for step, (v, r, x) in enumerate(test_set.take(n)):
-#      print(step)
-#      # Encode and decode the digit image.
-#      predicted = ANN(x)
-#      predict += list(predicted)
-#      real += list(v)
+#  #  Visualize predictions.
+#  import matplotlib.pyplot as plt
 #
-#  plt.plot(predict)
-#  plt.plot(real)
-#  plt.show()
-
-
+#
+#  # Predict 5 images from validation set.
+#  n_images = 5
+#  test_images = x_test[:n_images]
+#  predictions = conv_net(test_images)
+#
+#  # Display image and model prediction.
+#  for i in range(n_images):
+#      plt.imshow(np.reshape(test_images[i], [28, 28]), cmap='gray')
+#      plt.show()
+#      print("Model prediction: %i" % np.argmax(predictions.numpy()[i]))
+#

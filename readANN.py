@@ -1,11 +1,12 @@
 from __future__ import absolute_import, division, print_function
-from conv1D import ConvNet
+from ANN import ConvNet
 import tensorflow as tf
 from tensorflow.keras import Model, layers
 import numpy as np
 import matplotlib.pyplot as plt
-from load_basic import NET_NAME, DATA_SIZE
-from read_data import ideal_data_generator, exper_data_generator, DATA_FEATURES, EXPER_FEATURES, IDEALMEAN
+from load_basic import NET_NAME
+
+from read_data import ideal_data_generator, exper_data_generator, DATA_FEATURES, EXPER_FEATURES
 
 new_model = ConvNet()
 new_model.load_weights(NET_NAME)
@@ -29,13 +30,12 @@ realList = []
 #
 #
 #  for item in dataset.take(5714):
-for i, item in enumerate(dataset.take(DATA_SIZE)):
-    if i%100 != 0: continue
+for i, item in enumerate(dataset.take(5714)):
+    if i%10 != 0: continue
     vtemp, rtemp, data = item
     pred = new_model(data).numpy()[0][0]
-    pred += IDEALMEAN
     #  pred = (pred-b)*k+a # fit pred
-    vtemp = vtemp.numpy() + IDEALMEAN
+    vtemp = vtemp.numpy()
     predList.append(pred)
     realList.append(vtemp)
 
